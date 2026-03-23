@@ -93,7 +93,7 @@ fixed-width right-side panel with the canvas filling the remaining space.
 This build established the live-parameter editing workflow (sliders wired directly to
 render params, no rebuild needed for most changes).
 
-### Stage 6 — `orbital_sphere.html` (v4, current)
+### Stage 6 — `orbital_sphere.html` (v4 → now v0.1)
 **Full feature build — star field, moons, floating overlay UI.**
 
 Complete rewrite. Major additions:
@@ -148,6 +148,20 @@ visual thickness and the layered color effect that defines the look.
 **Why 39° tilt?**
 Empirically chosen — it's far enough from 0° (equatorial) and 90° (meridional) to look
 dynamic, and produces an appealing crossing pattern when all three shells are shown.
+
+---
+
+## Repo reset — 2026-03-23
+
+The project was reset to a clean single-commit history at v0.1:
+
+- The full development history above was preserved on the branch `archive/v4`.
+- Tags `v4` and `v4.1` were deleted; the new tag is `v0.1`.
+- The version badge in `orbital_sphere.html` was changed from `v4.1` → `v0.1`.
+
+The rationale: the project is essentially a fresh start from a stable, complete
+build rather than a continuation of the prototype chain. The `archive/v4` branch
+keeps the full history accessible if needed.
 
 ---
 
