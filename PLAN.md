@@ -1,50 +1,81 @@
-# Animated Orbital Sphere Graphics Tool — Plan
+# wire_sphere
 
-## What it produces
-An animated visualization matching the reference image: a glowing sphere made of
-layered orbital rings in multiple colors, rotating slowly on a black background.
+An interactive 3D wire-sphere visualization that runs in any browser with no dependencies.
 
-## Technology
-**Single self-contained HTML file** (HTML5 Canvas + vanilla JS).
-- Zero dependencies, opens in any browser
-- Easy to tweak parameters via on-screen controls
-- Smooth `requestAnimationFrame` animation loop
+## What it is
+
+A single self-contained HTML file (`orbital_sphere.html`) that renders a glowing sphere
+built from three concentric tilted shells of latitude rings, surrounded by a parallax star
+field and orbiting moons. Everything is drawn on an HTML5 Canvas using vanilla JavaScript.
 
 ## How the visuals work
-The sphere is built from three overlapping ring systems, each drawn as projected ellipses:
 
-| Layer | Style | Color |
-|-------|-------|-------|
-| Latitude rings | solid lines | Blue |
-| Diagonal spiral rings (tilt ~45°) | solid lines | Green |
-| Diagonal spiral rings (tilt ~-45°) | solid lines | Red/Pink |
-| Inner Lissajous path | dotted | Yellow-Green |
+### The sphere
+Three shells sit at slightly different radii (default: 228, 238, 248 px). Each shell is a
+set of latitude rings computed from spherical coordinates, then rotated by a tilt angle
+(default 39°) so the rings slice diagonally across the sphere rather than running
+horizontally. The three shells are colored red, green, and blue, giving the layered neon look.
 
-Each ring is an ellipse whose width/height is determined by its latitude position on
-the sphere (cos/sin of the polar angle). All rings share the same center point.
+Each ring is stored as an array of 3D points. On every frame the renderer projects all
+points through a perspective camera to 2D canvas coordinates, then draws filled dots at
+each point with a glow shadow.
 
-The rings are **fixed in 3D space**. Animation moves the **camera** in a slow elliptical
-orbit around the sphere (like a satellite). The viewpoint tilts slightly above/below
-the equator over time, giving a gentle rise-and-fall to the orbit path. Perspective
-projection makes near rings appear larger and far rings smaller.
+### The camera
+The camera orbits the sphere automatically by advancing an azimuth angle each frame. A
+slow sine wave on the elevation angle causes the camera to gently bob above and below the
+equator. The user can drag (mouse or touch) to spin the view manually, or lock the camera
+in place. Perspective projection (configurable focal length) is used — nearer points
+appear larger.
+
+### Star field
+Three concentric spherical shells of stars at distances ~8 000–28 000 px provide
+parallax depth. Each shell has independently adjustable brightness and count.
+
+### Moons
+Up to 8 moons orbit the sphere on configurable inclined orbital planes using proper
+Euler-angle orbital mechanics. Each moon is colored by hue, spaced evenly. Orbit dot
+trails and an equatorial-lock mode are available.
 
 ## File structure
+
 ```
-gfx_pipeline/
-  orbital_sphere.html   ← the tool (new file)
-  mov2gif.py            ← existing, untouched
+wire_sphere/
+  orbital_sphere.html   ← main visualization (v4)
+  orbital_qr.png        ← QR code linking to the live file
+  PLAN.md               ← this file
+  HANDOFF.md            ← project history
+  archive/
+    rings_minimal.html            ← latitude-ring prototype (single shell)
+    rings_shells.html             ← three-shell dot renderer (key breakthrough)
+    orbital_sphere_sidebar_ui.html ← sidebar UI experiment
+    proto_3d_base.html            ← original orbit-axis ring engine
+    proto_rings.html              ← orbit-axis refactor
+    proto_touch.html              ← added touch support
+    proto_touch_v2.html           ← simplified touch handling
 ```
 
-## Controls (sidebar panel)
-- **Rings per layer** — slider (10–60)
-- **Orbit speed** — slider (camera angular velocity)
-- **Orbit tilt** — slider (how far above/below equator camera bobs)
-- **Glow intensity** — slider (uses Canvas shadow blur)
-- **Color scheme** — dropdown (Neon / Pastel / Monochrome / Custom)
-- **Dot layer** — toggle on/off
-- **Export frame** — saves current frame as PNG
+## Controls (overlay panel, top-right)
 
-## Key parameters (code constants, also exposed in UI)
-- `RADIUS` — sphere radius in px
-- `RING_SETS` — array of `{ count, tilt, color, dash, speed }`
-- `BG_COLOR` — background (default #000)
+| Control | What it does |
+|---|---|
+| star field | toggle star layer visibility |
+| stars far/mid/near bright | brightness per star layer |
+| stars far/mid/near count | point count per layer |
+| orbit lines | toggle moon orbit dot trails |
+| equatorial orbits | force all moon orbits to the equatorial plane |
+| lock camera | pause auto-rotation |
+| zoom (cam dist) | distance of camera from origin |
+| focal len (mm) | perspective strength |
+| inner radius | radius of innermost shell |
+| shell gap | spacing between the three shells |
+| rings | latitude rings per shell |
+| dots/ring | segments per ring (point count) |
+| dot size | rendered dot radius in px |
+| tilt (deg) | shell rotation angle (0 = equatorial rings, 90 = meridian rings) |
+| speed | camera auto-rotation speed |
+| moon count | number of orbiting moons (0–8) |
+| moon size / orbit r / incline / speed / brightness | per-moon properties |
+| incline spread / orbit var / size var | randomization ranges for moon variation |
+| orbit dots | dot count for moon orbit trails |
+
+All slider values persist across page loads via `localStorage`.
