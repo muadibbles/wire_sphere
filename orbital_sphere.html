@@ -119,6 +119,8 @@ const P={
   moonSpread:{v:40, min:0,  max:180, label:'incline spread'},
   moonRVar:  {v:.4,  min:0,   max:1,   label:'moon orbit var', step:.01},
   moonSzVar: {v:.5,  min:0,   max:1,   label:'moon size var', step:.01},
+  moonEcc:   {v:.15, min:0,   max:.7,  label:'moon ecc',      step:.01},
+  moonEccVar:{v:.6,  min:0,   max:1,   label:'moon ecc var',  step:.01},
   orbitDots:{v:80,  min:10,  max:300, label:'orbit dots', int:true},
 };
 for(const [k,d] of Object.entries(P))d.v=d.int?parseInt(lsGet('p_'+k,d.v)):parseFloat(lsGet('p_'+k,d.v));
@@ -181,7 +183,17 @@ const f=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cr=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const sb=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
 const nl=v=>{const l=M.hypot(...v);return l<1e-9?[0,1,0]:v.map(x=>x/l)};
-const moonPt=(mr,cn,sn,ci,si,ct,st)=>[mr*(cn*ct-sn*ci*st),mr*si*st,mr*(sn*ct+cn*ci*st)];
+// Full Kepler pipeline: mean anomaly → eccentric anomaly (Newton-Raphson)
+// → true anomaly → r → orbital-plane position → rotate to world frame.
+// ω=0 (periapsis at ascending node). Axis convention: [x, y_vert, z_depth].
+const moonKeplerPos=(a,e,ma,cn,sn,ci,si)=>{
+  let ea=ma;
+  for(let k=0;k<5;k++)ea-=(ea-e*M.sin(ea)-ma)/(1-e*M.cos(ea));
+  const nu=2*M.atan2(M.sqrt(1+e)*M.sin(ea/2),M.sqrt(1-e)*M.cos(ea/2));
+  const r=a*(1-e*M.cos(ea));
+  const xo=r*M.cos(nu),yo=r*M.sin(nu);
+  return[cn*xo-sn*ci*yo, si*yo, sn*xo+cn*ci*yo];
+};
 
 requestAnimationFrame(function L(ts){
   const locked=camLock.checked;
@@ -221,11 +233,14 @@ requestAnimationFrame(function L(ts){
       const inc=baseInc+spread*M.sin(i*PHI+1.0);
       const node=i*PHI;
       const si=M.sin(inc),ci=M.cos(inc),sn=M.sin(node),cn=M.cos(node);
-      const th=ts*P.moonSpd.v+6.283*i/mc;
-      const ct=M.cos(th),st=M.sin(th);
-      const mv=moonPt(mr,cn,sn,ci,si,ct,st);
+      // Kepler T²∝a³: angular speed ∝ r^(-3/2)
+      const omega=P.moonSpd.v*M.pow(baseMr/mr,1.5);
+      const ma=(ts*omega+6.283*i/mc)%6.283;
+      // per-moon eccentricity with variation
+      const e=M.min(.95,M.max(0,P.moonEcc.v*(1+P.moonEccVar.v*M.sin(i*PHI*1.3+2.4))));
+      const mv=moonKeplerPos(mr,e,ma,cn,sn,ci,si);
       const behind=mv[0]*pos[0]+mv[1]*pos[1]+mv[2]*pos[2]<0;
-      moonData.push({mv,color,behind,i,inc,si,ci,sn,cn,mr,ms});
+      moonData.push({mv,color,behind,i,inc,si,ci,sn,cn,mr,ms,e});
     }
   }
 
@@ -238,8 +253,13 @@ requestAnimationFrame(function L(ts){
         q.shadowColor=m.color;q.shadowBlur=4;q.fillStyle=m.color;
         q.beginPath();
         for(let j=0;j<od;j++){
-          const t=j/od*6.283,ct2=M.cos(t),st2=M.sin(t);
-          const ov=moonPt(m.mr,m.cn,m.sn,m.ci,m.si,ct2,st2);
+          const ma2=j/od*6.283;
+          let ea2=ma2;
+          for(let k=0;k<5;k++)ea2-=(ea2-m.e*M.sin(ea2)-ma2)/(1-m.e*M.cos(ea2));
+          const nu2=2*M.atan2(M.sqrt(1+m.e)*M.sin(ea2/2),M.sqrt(1-m.e)*M.cos(ea2/2));
+          const r2=m.mr*(1-m.e*M.cos(ea2));
+          const xo=r2*M.cos(nu2),yo=r2*M.sin(nu2);
+          const ov=[m.cn*xo-m.sn*m.ci*yo, m.si*yo, m.sn*xo+m.cn*m.ci*yo];
           const p=pr(ov);if(!p)continue;
           q.moveTo(p[0]+1.5,p[1]);q.arc(p[0],p[1],1.5,0,6.283);
         }
