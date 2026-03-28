@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<meta name=viewport content="width=480,initial-scale=1,user-scalable=no">
+<body style="margin:0;background:#000;overflow:hidden">
+<canvas id=c style="touch-action:none;display:block;width:480px;height:480px"></canvas>
+<div style="position:fixed;bottom:6px;left:8px;color:#222;font:13px monospace;pointer-events:none">v0.2 r1</div>
+
+<script>
+const M=Math,q=c.getContext('2d');
+c.width=480;c.height=480;
+const W=480;
+
+let az=0,el=0,drag=0,daz=0,mx=0,my=0,de=0,prev=0;
+let locked=false;
+
+// tap anywhere toggles rotation lock
+c.onclick=()=>locked=!locked;
+c.ontouchstart=e=>{drag=1;mx=e.touches[0].clientX;my=e.touches[0].clientY;daz=az;de=el;e.preventDefault()};
+c.ontouchmove=e=>{
+  az=daz+(e.touches[0].clientX-mx)*.007;
+  el=M.max(-1.2,M.min(1.2,de+(my-e.touches[0].clientY)*.007));
+  e.preventDefault();
+};
+c.ontouchend=e=>{
+  // only toggle lock on a tap (no significant movement)
+  const dx=e.changedTouches[0].clientX-mx,dy=e.changedTouches[0].clientY-my;
+  if(M.hypot(dx,dy)<8)locked=!locked;
+  drag=0;
+};
+
+// --- params (fixed, no sliders) ---
+const CAM=520, FL=W*28/36, SPEED=.0003;
+const R0=228, GAP=10, N=14, SEG=80, DOT=2;
+const TILT=39*M.PI/180;
+const MOON_R=700, MOON_SPD=.0008, MOON_SZ=5, MOON_N=2, MOON_ECC=.15;
+const PHI=2.39996;
+
+// --- star field (one layer, low count) ---
+const stars=[];
+for(let i=0;i<400;i++){
+  const th=M.random()*6.283,ph=M.acos(2*M.random()-1);
+  const r=8000+M.random()*20000,sz=.4+M.random()*1.2;
+  stars.push([r*M.sin(ph)*M.cos(th),r*M.sin(ph)*M.sin(th),r*M.cos(ph),sz]);
+}
+
+// --- sphere geometry ---
+const shells=[
+  {color:'#ff3355',glow:'#ff2244'},
+  {color:'#33ff77',glow:'#22ff66'},
+  {color:'#4488ff',glow:'#3377ff'},
+];
+const ct=M.cos(TILT),st=M.sin(TILT);
+shells.forEach((s,i)=>{
+  const r=R0+i*GAP;
+  s.rings=Array.from({length:N},(_,ii)=>{
+    const phi=M.PI*(ii+.5)/N-M.PI/2,y=r*M.sin(phi),rr=r*M.cos(phi);
+    return Array.from({length:SEG+1},(_,j)=>{
+      const t=j/SEG*6.283,x=rr*M.cos(t),z=rr*M.sin(t);
+      return[x,y*ct-z*st,y*st+z*ct];
+    });
+  });
+});
+
+// --- kepler ---
+const moonPos=(a,e,ma,cn,sn,ci,si)=>{
+  let ea=ma;
+  for(let k=0;k<5;k++)ea-=(ea-e*M.sin(ea)-ma)/(1-e*M.cos(ea));
+  const nu=2*M.atan2(M.sqrt(1+e)*M.sin(ea/2),M.sqrt(1-e)*M.cos(ea/2));
+  const r=a*(1-e*M.cos(ea));
+  const xo=r*M.cos(nu),yo=r*M.sin(nu);
+  return[cn*xo-sn*ci*yo, si*yo, sn*xo+cn*ci*yo];
+};
+
+// --- math helpers ---
+const f=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cr=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const sb=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const nl=v=>{const l=M.hypot(...v);return l<1e-9?[0,1,0]:v.map(x=>x/l)};
+
+requestAnimationFrame(function L(ts){
+  if(!drag&&!locked)az+=SPEED*(ts-prev);
+  prev=ts;
+
+  const E=locked?el:.25*M.sin(ts*.00028)+el;
+  const ce=M.cos(E),se=M.sin(E);
+  const pos=[CAM*M.sin(az)*ce,CAM*se,CAM*M.cos(az)*ce];
+  const fwd=nl([-pos[0],-pos[1],-pos[2]]),rgt=nl(cr(fwd,[0,1,0])),up=nl(cr(rgt,fwd));
+  const cx=W/2;
+  const pr=v=>{const dv=sb(v,pos),xc=f(dv,rgt),yc=f(dv,up),zc=f(dv,fwd);return zc<.5?null:[cx+FL*xc/zc,cx-FL*yc/zc]};
+
+  q.fillStyle='#000';q.fillRect(0,0,W,W);
+
+  // stars
+  q.shadowBlur=0;q.fillStyle='rgba(255,255,255,.5)';q.beginPath();
+  for(const v of stars){const p=pr(v);if(!p)continue;q.moveTo(p[0]+v[3],p[1]);q.arc(p[0],p[1],v[3],0,6.283);}
+  q.fill();
+
+  // moons
+  const moonData=[];
+  for(let i=0;i<MOON_N;i++){
+    const mr=MOON_R*(1+.3*M.sin(i*PHI*2.1+.7));
+    const inc=.7+.5*M.sin(i*PHI+1);
+    const node=i*PHI;
+    const si=M.sin(inc),ci=M.cos(inc),sn=M.sin(node),cn=M.cos(node);
+    const omega=MOON_SPD*M.pow(MOON_R/mr,1.5);
+    const ma=(ts*omega+6.283*i/MOON_N)%6.283;
+    const e=MOON_ECC*(1+.5*M.sin(i*PHI*1.3+2.4));
+    const mv=moonPos(mr,e,ma,cn,sn,ci,si);
+    const hue=(i*360/MOON_N)|0;
+    const color=`hsl(${hue},80%,65%)`;
+    const behind=mv[0]*pos[0]+mv[1]*pos[1]+mv[2]*pos[2]<0;
+    moonData.push({mv,mr,e,ci,si,cn,sn,color,behind,ms:MOON_SZ});
+  }
+
+  // orbit trails + back moons
+  for(const m of moonData){
+    q.shadowColor=m.color;q.shadowBlur=3;q.fillStyle=m.color;q.beginPath();
+    for(let j=0;j<60;j++){
+      const ma2=j/60*6.283;let ea2=ma2;
+      for(let k=0;k<5;k++)ea2-=(ea2-m.e*M.sin(ea2)-ma2)/(1-m.e*M.cos(ea2));
+      const nu2=2*M.atan2(M.sqrt(1+m.e)*M.sin(ea2/2),M.sqrt(1-m.e)*M.cos(ea2/2));
+      const r2=m.mr*(1-m.e*M.cos(ea2));
+      const xo=r2*M.cos(nu2),yo=r2*M.sin(nu2);
+      const ov=[m.cn*xo-m.sn*m.ci*yo,m.si*yo,m.sn*xo+m.cn*m.ci*yo];
+      const p=pr(ov);if(!p)continue;
+      q.moveTo(p[0]+1.2,p[1]);q.arc(p[0],p[1],1.2,0,6.283);
+    }
+    q.fill();
+    if(m.behind){const p=pr(m.mv);if(p){q.shadowBlur=16;q.fillStyle=m.color;q.beginPath();q.arc(p[0],p[1],m.ms,0,6.283);q.fill();}}
+  }
+
+  // sphere
+  for(const s of shells){
+    q.fillStyle=s.color;q.shadowColor=s.glow;q.shadowBlur=8;q.beginPath();
+    for(const ring of s.rings)
+      for(const v of ring){const p=pr(v);if(!p)continue;q.moveTo(p[0]+DOT,p[1]);q.arc(p[0],p[1],DOT,0,6.283)}
+    q.fill();
+  }
+
+  // front moons
+  for(const m of moonData){
+    if(!m.behind){const p=pr(m.mv);if(p){q.shadowColor=m.color;q.shadowBlur=16;q.fillStyle=m.color;q.beginPath();q.arc(p[0],p[1],m.ms,0,6.283);q.fill();}}
+  }
+
+  q.shadowBlur=0;
+  requestAnimationFrame(L);
+});
+</script>
